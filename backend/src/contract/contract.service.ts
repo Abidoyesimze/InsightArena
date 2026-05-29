@@ -36,12 +36,39 @@ export interface ContractMatch {
 }
 
 export interface ContractPrediction {
-  predictionId: string;
-  matchId: string;
-  user: string;
-  chosenOutcome: string;
-  stakeAmount: string;
-  claimed: boolean;
+  predictionId?: string;
+  prediction_id?: string | number;
+  matchId?: string;
+  match_id?: string | number;
+  eventId?: string;
+  event_id?: string | number;
+  user?: string;
+  predictor?: string;
+  chosenOutcome?: string;
+  predictedOutcome?: string;
+  predicted_outcome?: string;
+  predictedAt?: number;
+  predicted_at?: number;
+  stakeAmount?: string;
+  claimed?: boolean;
+  isCorrect?: boolean | null;
+  is_correct?: boolean | null;
+}
+
+export interface ContractEventStatistics {
+  eventId: string;
+  participantCount: number;
+  matchCount: number;
+  totalPredictions: number;
+  allMatchesResolved: boolean;
+  winnersVerified: boolean;
+  winnerCount: number;
+}
+
+export interface ContractPredictionDistribution {
+  teamA: number;
+  teamB: number;
+  draw: number;
 }
 
 export interface ContractParticipant {
@@ -168,6 +195,66 @@ export class ContractService {
       new Address(address).toScVal(),
     ]);
     return result ?? false;
+  }
+
+  async getEventStatistics(
+    eventId: string,
+  ): Promise<ContractEventStatistics | null> {
+    const numericId = Number(eventId);
+    if (!Number.isFinite(numericId)) {
+      return null;
+    }
+
+    const result = await this.viewCall<Record<string, unknown>>(
+      'get_event_statistics',
+      [nativeToScVal(numericId, { type: 'u64' })],
+    );
+
+    if (!result) {
+      return null;
+    }
+
+    return {
+      eventId: String(result.eventId ?? result.event_id ?? eventId),
+      participantCount: Number(
+        result.participantCount ?? result.participant_count ?? 0,
+      ),
+      matchCount: Number(result.matchCount ?? result.match_count ?? 0),
+      totalPredictions: Number(
+        result.totalPredictions ?? result.total_predictions ?? 0,
+      ),
+      allMatchesResolved: Boolean(
+        result.allMatchesResolved ?? result.all_matches_resolved ?? false,
+      ),
+      winnersVerified: Boolean(
+        result.winnersVerified ?? result.winners_verified ?? false,
+      ),
+      winnerCount: Number(result.winnerCount ?? result.winner_count ?? 0),
+    };
+  }
+
+  async getPredictionDistribution(
+    matchId: string,
+  ): Promise<ContractPredictionDistribution> {
+    const numericId = Number(matchId);
+    if (!Number.isFinite(numericId)) {
+      return { teamA: 0, teamB: 0, draw: 0 };
+    }
+
+    const result = await this.viewCall<[number, number, number] | number[]>(
+      'get_prediction_distribution',
+      [nativeToScVal(numericId, { type: 'u64' })],
+    );
+
+    if (!result || !Array.isArray(result) || result.length < 3) {
+      return { teamA: 0, teamB: 0, draw: 0 };
+    }
+
+    return {
+      teamA: Number(result[0] ?? 0),
+      teamB: Number(result[1] ?? 0),
+      draw: Number(result[2] ?? 0),
+    };
   }
 
   private async viewCall<T>(fn: string, args: xdr.ScVal[]): Promise<T | null> {

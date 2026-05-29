@@ -32,6 +32,7 @@ export class IndexerService implements OnModuleInit {
   private eventsProcessed = 0;
   private lastProcessedAt = Date.now();
   private processingRate = 0;
+  private eventTimestamps: number[] = [];
 
   constructor(
     private readonly configService: ConfigService,
@@ -127,6 +128,7 @@ export class IndexerService implements OnModuleInit {
         try {
           await this.storeAndProcessEvent(rawEvent);
           this.eventsProcessed++;
+          this.recordProcessedEvent();
           if (rawEvent.ledger > maxProcessedLedger) {
             maxProcessedLedger = rawEvent.ledger;
           }
@@ -833,6 +835,26 @@ export class IndexerService implements OnModuleInit {
       CHECKPOINT_LEDGER_KEY,
       Math.max(0, fromLedger - 1),
     );
+  }
+
+  async triggerManualSync(): Promise<void> {
+    await this.pollContractEvents();
+  }
+
+  getEventsProcessedPerMinute(): number {
+    const cutoff = Date.now() - 60_000;
+    this.eventTimestamps = this.eventTimestamps.filter((t) => t >= cutoff);
+    return this.eventTimestamps.length;
+  }
+
+  getLastSuccessfulSyncTimestamp(): Date {
+    return new Date(this.lastProcessedAt);
+  }
+
+  private recordProcessedEvent(): void {
+    this.eventTimestamps.push(Date.now());
+    const cutoff = Date.now() - 60_000;
+    this.eventTimestamps = this.eventTimestamps.filter((t) => t >= cutoff);
   }
 
   async getEventsPaginated(cursor?: string, limit = 50) {

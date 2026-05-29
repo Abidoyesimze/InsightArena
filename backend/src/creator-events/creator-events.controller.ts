@@ -27,7 +27,10 @@ import { ListParticipantsQueryDto } from './dto/list-participants-query.dto';
 import { SearchEventsQueryDto } from './dto/search-events-query.dto';
 import { SearchEventsResponseDto } from './dto/search-events-response.dto';
 import { UserScoreResponseDto } from './dto/user-score-response.dto';
+import { UserPredictionsResponseDto } from './dto/user-predictions-response.dto';
+import { EventStatsResponseDto } from './dto/event-stats-response.dto';
 
+@ApiTags('creator-events')
 @Controller('creator-events')
 export class CreatorEventsController {
   constructor(private readonly creatorEventsService: CreatorEventsService) {}
@@ -113,6 +116,45 @@ export class CreatorEventsController {
     @Query() query: ListMatchesQueryDto,
   ) {
     return this.creatorEventsService.getEventMatches(id, query);
+  }
+
+  /**
+   * GET /api/creator-events/:id/stats
+   * #727 — Fetch detailed statistics for a specific event.
+   */
+  @Get(':id/stats')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(120) // 2 minutes
+  @ApiOperation({ summary: 'Get event statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Event statistics with prediction distribution',
+    type: EventStatsResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Event not found' })
+  getEventStats(@Param('id') id: string): Promise<EventStatsResponseDto> {
+    return this.creatorEventsService.getEventStats(id);
+  }
+
+  /**
+   * GET /api/creator-events/:id/predictions/:address
+   * #731 — Fetch all predictions a user has made for a specific event.
+   */
+  @Get(':id/predictions/:address')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(30) // 30 seconds
+  @ApiOperation({ summary: 'Get user predictions for an event' })
+  @ApiResponse({
+    status: 200,
+    description: 'User predictions with match details and score',
+    type: UserPredictionsResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Event not found' })
+  getUserPredictions(
+    @Param('id') id: string,
+    @Param('address') address: string,
+  ): Promise<UserPredictionsResponseDto> {
+    return this.creatorEventsService.getUserPredictionsForEvent(id, address);
   }
 
   /**

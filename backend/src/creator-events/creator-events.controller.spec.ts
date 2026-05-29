@@ -13,6 +13,8 @@ import {
 } from './dto/list-matches-query.dto';
 import { EventByCodeResponseDto } from './dto/event-by-code-response.dto';
 import { UserScoreResponseDto } from './dto/user-score-response.dto';
+import { UserPredictionsResponseDto } from './dto/user-predictions-response.dto';
+import { EventStatsResponseDto } from './dto/event-stats-response.dto';
 
 describe('CreatorEventsController', () => {
   let controller: CreatorEventsController;
@@ -30,6 +32,8 @@ describe('CreatorEventsController', () => {
             getParticipants: jest.fn(),
             getEventMatches: jest.fn(),
             getUserScore: jest.fn(),
+            getUserPredictionsForEvent: jest.fn(),
+            getEventStats: jest.fn(),
             getContractConfig: jest.fn(),
           },
         },
@@ -80,6 +84,56 @@ describe('CreatorEventsController', () => {
       const result = await controller.getEventMatches('event-1', query);
 
       expect(result).toEqual(mockMatches);
+    });
+  });
+
+  describe('getUserPredictions', () => {
+    it('should call service with correct parameters', async () => {
+      const mockResponse: UserPredictionsResponseDto = {
+        address: 'GUSER1',
+        eventId: 'event-1',
+        score: {
+          totalPredictions: 2,
+          correctPredictions: 1,
+          accuracyPercentage: 50,
+          matchesRemaining: 0,
+        },
+        predictions: [],
+      };
+
+      service.getUserPredictionsForEvent.mockResolvedValue(mockResponse);
+
+      await controller.getUserPredictions('event-1', 'GUSER1');
+
+      expect(service.getUserPredictionsForEvent).toHaveBeenCalledWith(
+        'event-1',
+        'GUSER1',
+      );
+    });
+  });
+
+  describe('getEventStats', () => {
+    it('should return event stats from service', async () => {
+      const mockStats: EventStatsResponseDto = {
+        eventId: 'event-1',
+        totalParticipants: 10,
+        totalMatches: 5,
+        matchesResolved: 3,
+        matchesPending: 2,
+        totalPredictions: 40,
+        predictionDistribution: [],
+        winnersVerified: false,
+        winnerCount: 0,
+        averagePredictionsPerUser: 4,
+        completionRate: 60,
+      };
+
+      service.getEventStats.mockResolvedValue(mockStats);
+
+      const result = await controller.getEventStats('event-1');
+
+      expect(service.getEventStats).toHaveBeenCalledWith('event-1');
+      expect(result).toEqual(mockStats);
     });
   });
 

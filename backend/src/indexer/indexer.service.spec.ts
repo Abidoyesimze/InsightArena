@@ -187,6 +187,20 @@ describe('IndexerService', () => {
     });
   });
 
+  describe('health helpers', () => {
+    it('tracks events processed per minute', () => {
+      (service as any).recordProcessedEvent();
+      (service as any).recordProcessedEvent();
+
+      expect(service.getEventsProcessedPerMinute()).toBe(2);
+    });
+
+    it('returns last successful sync timestamp', () => {
+      const timestamp = service.getLastSuccessfulSyncTimestamp();
+      expect(timestamp).toBeInstanceOf(Date);
+    });
+  });
+
   describe('retryFailedEvents', () => {
     it('should retry failed events', async () => {
       const failedEvent = {

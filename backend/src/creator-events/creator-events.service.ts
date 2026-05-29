@@ -34,6 +34,12 @@ import {
   SearchHighlightsDto,
 } from './dto/search-events-response.dto';
 import { UserScoreResponseDto } from './dto/user-score-response.dto';
+import { UserPredictionsResponseDto } from './dto/user-predictions-response.dto';
+import { EventStatsResponseDto } from './dto/event-stats-response.dto';
+import {
+  normalizeContractPrediction,
+  resolveCorrectness,
+} from './utils/prediction.util';
 
 // Type definitions - exported for use in controllers
 export interface ParticipantWithStats {
@@ -308,6 +314,156 @@ export class CreatorEventsService {
     };
   }
 
+  async getUserPredictionsForEvent(
+    eventId: string,
+    address: string,
+  ): Promise<UserPredictionsResponseDto> {
+    const event = await this.contractService.getEvent(eventId);
+    if (!event) {
+      throw new NotFoundException(`Event ${eventId} not found`);
+    }
+
+    const [matches, rawPredictions] = await Promise.all([
+      this.contractService.getEventMatches(eventId),
+      this.contractService.getUserPredictions(address, eventId),
+    ]);
+
+    const matchMap = new Map(matches.map((m) => [String(m.matchId), m]));
+    const predictedMatchIds = new Set<string>();
+
+    let correctPredictions = 0;
+    let resolvedPredictions = 0;
+
+    const predictions = rawPredictions
+      .map((raw) => {
+        const normalized = normalizeContractPrediction(raw);
+        const match = matchMap.get(normalized.matchId);
+        if (!match) {
+          return null;
+        }
+
+        predictedMatchIds.add(normalized.matchId);
+        const isCorrect = resolveCorrectness(
+          normalized,
+          match.resolved,
+          match.outcome,
+        );
+
+        if (match.resolved) {
+          resolvedPredictions++;
+          if (isCorrect) {
+            correctPredictions++;
+          }
+        }
+
+        return {
+          predictionId: normalized.predictionId,
+          matchId: normalized.matchId,
+          match: {
+            matchId: match.matchId,
+            homeTeam: match.homeTeam,
+            awayTeam: match.awayTeam,
+            matchTime: match.startTime,
+          },
+          predictedOutcome: normalized.predictedOutcome,
+          actualResult: match.resolved ? match.outcome : null,
+          isCorrect,
+          predictedAt: normalized.predictedAt,
+        };
+      })
+      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .sort((a, b) => a.match.matchTime - b.match.matchTime);
+
+    const totalPredictions = predictions.length;
+    const matchesRemaining = matches.filter(
+      (m) => !predictedMatchIds.has(String(m.matchId)),
+    ).length;
+    const accuracyPercentage =
+      resolvedPredictions > 0
+        ? Math.round((correctPredictions / resolvedPredictions) * 100)
+        : 0;
+
+    return {
+      address,
+      eventId,
+      score: {
+        totalPredictions,
+        correctPredictions,
+        accuracyPercentage,
+        matchesRemaining,
+      },
+      predictions,
+    };
+  }
+
+  async getEventStats(eventId: string): Promise<EventStatsResponseDto> {
+    const event = await this.contractService.getEvent(eventId);
+    if (!event) {
+      throw new NotFoundException(`Event ${eventId} not found`);
+    }
+
+    const [statistics, matches, participants] = await Promise.all([
+      this.contractService.getEventStatistics(eventId),
+      this.contractService.getEventMatches(eventId),
+      this.contractService.getEventParticipants(eventId),
+    ]);
+
+    const matchesResolved = matches.filter((m) => m.resolved).length;
+    const matchesPending = matches.length - matchesResolved;
+
+    const distributionResults = await Promise.all(
+      matches.map(async (match) => {
+        const distribution = await this.contractService.getPredictionDistribution(
+          String(match.matchId),
+        );
+        return {
+          matchId: String(match.matchId),
+          homeTeam: match.homeTeam,
+          awayTeam: match.awayTeam,
+          teamA: distribution.teamA,
+          teamB: distribution.teamB,
+          draw: distribution.draw,
+          total: distribution.teamA + distribution.teamB + distribution.draw,
+        };
+      }),
+    );
+
+    const totalParticipants =
+      statistics?.participantCount ?? participants.length;
+    const totalMatches = statistics?.matchCount ?? matches.length;
+    const totalPredictions =
+      statistics?.totalPredictions ??
+      distributionResults.reduce((sum, item) => sum + item.total, 0);
+
+    const matchCount = matches.length;
+    const usersWithFullPredictions = participants.filter(
+      (p) => p.predictionCount >= matchCount && matchCount > 0,
+    ).length;
+    const completionRate =
+      totalParticipants > 0
+        ? Math.round((usersWithFullPredictions / totalParticipants) * 100)
+        : 0;
+
+    const averagePredictionsPerUser =
+      totalParticipants > 0
+        ? Math.round((totalPredictions / totalParticipants) * 100) / 100
+        : 0;
+
+    return {
+      eventId,
+      totalParticipants,
+      totalMatches,
+      matchesResolved,
+      matchesPending,
+      totalPredictions,
+      predictionDistribution: distributionResults,
+      winnersVerified: statistics?.winnersVerified ?? false,
+      winnerCount: statistics?.winnerCount ?? 0,
+      averagePredictionsPerUser,
+      completionRate,
+    };
+  }
+
   async getUserScore(
     eventId: string,
     address: string,
@@ -333,12 +489,15 @@ export class CreatorEventsService {
     let pendingPredictions = 0;
 
     for (const prediction of userPredictions) {
-      const match = matches.find((m) => m.matchId === prediction.matchId);
+      const normalized = normalizeContractPrediction(prediction);
+      const match = matches.find((m) => String(m.matchId) === normalized.matchId);
       if (!match) continue;
 
       if (!match.resolved) {
         pendingPredictions++;
-      } else if (match.outcome === prediction.chosenOutcome) {
+      } else if (
+        resolveCorrectness(normalized, match.resolved, match.outcome)
+      ) {
         correctPredictions++;
       } else {
         incorrectPredictions++;
