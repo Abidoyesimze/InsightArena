@@ -17,7 +17,7 @@ import { useWallet } from "@/context/WalletContext";
 import AddMatchForm, { type MatchFormData } from "@/component/creator-events/AddMatchForm";
 import BulkMatchUpload from "@/component/creator-events/BulkMatchUpload";
 import SubmitResultForm from "@/component/creator-events/SubmitResultForm";
-import { useCreatorEvents } from "@/hooks/useCreatorEvents";
+import { type MatchOutcome, useCreatorEvents } from "@/hooks/useCreatorEvents";
 
 type MatchStatus = "upcoming" | "started" | "resolved";
 
@@ -94,6 +94,15 @@ function statusBadge(status: MatchStatus) {
       Resolved
     </span>
   );
+}
+
+function deriveOutcomeFromScore(
+  homeScore: number,
+  awayScore: number,
+): MatchOutcome {
+  if (homeScore > awayScore) return "TeamA";
+  if (awayScore > homeScore) return "TeamB";
+  return "Draw";
 }
 
 export default function MatchManagementPage() {
@@ -289,7 +298,11 @@ export default function MatchManagementPage() {
                         teamB={match.teamB}
                         initialResult={match.result}
                         onSubmit={async (homeScore, awayScore) => {
-                          await submitMatchResult(match.id, homeScore, awayScore);
+                          await submitMatchResult(
+                            match.id,
+                            deriveOutcomeFromScore(homeScore, awayScore),
+                            { homeScore, awayScore },
+                          );
                           setMatches((prev) =>
                             prev.map((m) =>
                               m.id === match.id
