@@ -22,6 +22,7 @@ import { MatchPrediction } from '../matches/entities/match-prediction.entity';
 import { User } from '../users/entities/user.entity';
 import { NotificationGeneratorService } from '../notifications/notification-generator.service';
 import { BroadcasterService } from '../websocket/broadcaster.service';
+import { ReconciliationService } from './reconciliation.service';
 
 describe('IndexerService', () => {
   let service: IndexerService;
@@ -182,6 +183,12 @@ describe('IndexerService', () => {
             broadcastWinnersVerified: jest.fn(),
             broadcastEventCancelled: jest.fn(),
             broadcastEventFinalized: jest.fn(),
+          },
+        },
+        {
+          provide: ReconciliationService,
+          useValue: {
+            advanceCheckpoint: jest.fn(),
           },
         },
       ],

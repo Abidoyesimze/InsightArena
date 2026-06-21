@@ -21,6 +21,7 @@ import {
 import { User } from '../users/entities/user.entity';
 import { NotificationGeneratorService } from '../notifications/notification-generator.service';
 import { BroadcasterService } from '../websocket/broadcaster.service';
+import { ReconciliationService } from './reconciliation.service';
 
 const CHECKPOINT_LEDGER_KEY = 'indexer:last_processed_ledger';
 const CHECKPOINT_LEDGER_KEY_LATEST = 'indexer:latest_contract_ledger';
@@ -73,6 +74,7 @@ export class IndexerService implements OnModuleInit {
 
     private readonly notificationGeneratorService: NotificationGeneratorService,
     private readonly broadcasterService: BroadcasterService,
+    private readonly reconciliationService: ReconciliationService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -131,6 +133,15 @@ export class IndexerService implements OnModuleInit {
       if (events.length === 0) {
         if (latestLedger > lastLedger) {
           await this.saveCheckpoint(CHECKPOINT_LEDGER_KEY, latestLedger);
+          const activeContractId = this.configService.get<string>(
+            'SOROBAN_CONTRACT_ID',
+          );
+          if (activeContractId) {
+            await this.reconciliationService.advanceCheckpoint(
+              activeContractId,
+              latestLedger,
+            );
+          }
         }
         return;
       }
@@ -155,10 +166,18 @@ export class IndexerService implements OnModuleInit {
         }
       }
 
-      await this.saveCheckpoint(
-        CHECKPOINT_LEDGER_KEY,
-        Math.max(maxProcessedLedger, latestLedger),
+      const finalLedger = Math.max(maxProcessedLedger, latestLedger);
+      await this.saveCheckpoint(CHECKPOINT_LEDGER_KEY, finalLedger);
+
+      const activeContractId = this.configService.get<string>(
+        'SOROBAN_CONTRACT_ID',
       );
+      if (activeContractId) {
+        await this.reconciliationService.advanceCheckpoint(
+          activeContractId,
+          finalLedger,
+        );
+      }
 
       const elapsed = Date.now() - batchStart;
       this.processingRate =
@@ -782,11 +801,13 @@ export class IndexerService implements OnModuleInit {
     if (existing) return;
 
     const predictedHomeScore =
-      data.predicted_home_score !== undefined && data.predicted_home_score !== null
+      data.predicted_home_score !== undefined &&
+      data.predicted_home_score !== null
         ? Number(data.predicted_home_score)
         : null;
     const predictedAwayScore =
-      data.predicted_away_score !== undefined && data.predicted_away_score !== null
+      data.predicted_away_score !== undefined &&
+      data.predicted_away_score !== null
         ? Number(data.predicted_away_score)
         : null;
 
