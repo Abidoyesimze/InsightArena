@@ -4,4 +4,8 @@ export const CACHE_WARMING_KEYS = {
   platformStatistics: 'cache-warming:platform-statistics',
   popularEventDetail: (eventId: string) =>
     `cache-warming:popular-event:${eventId}`,
+  leaderboardCursor: (seasonId: string | null, page: number) =>
+    `leaderboard:cursor:${seasonId ?? 'all'}:page:${page}`,
+  leaderboardCursorPattern: (seasonId: string | null) =>
+    `leaderboard:cursor:${seasonId ?? 'all'}:page:*`,
 } as const;
