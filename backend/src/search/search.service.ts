@@ -29,17 +29,17 @@ export class SearchService {
     const limit = Math.min(dto.limit ?? 20, 50);
     const skip = (page - 1) * limit;
     const searchType = dto.type ?? SearchType.All;
-    const searchPattern = `%${dto.query}%`;
+    const query = dto.query;
 
     const [markets, users, competitions] = await Promise.all([
       searchType === SearchType.All || searchType === SearchType.Markets
-        ? this.searchMarkets(searchPattern, skip, limit)
+        ? this.searchMarkets(query, skip, limit)
         : Promise.resolve([]),
       searchType === SearchType.All || searchType === SearchType.Users
-        ? this.searchUsers(searchPattern, skip, limit)
+        ? this.searchUsers(query, skip, limit)
         : Promise.resolve([]),
       searchType === SearchType.All || searchType === SearchType.Competitions
-        ? this.searchCompetitions(searchPattern, skip, limit)
+        ? this.searchCompetitions(query, skip, limit)
         : Promise.resolve([]),
     ]);
 
@@ -49,7 +49,7 @@ export class SearchService {
   }
 
   private async searchMarkets(
-    pattern: string,
+    query: string,
     skip: number,
     limit: number,
   ): Promise<Market[]> {
@@ -67,17 +67,20 @@ export class SearchService {
       ])
       .where('market.is_public = :isPublic', { isPublic: true })
       .andWhere(
-        '(market.title ILIKE :pattern OR market.description ILIKE :pattern)',
-        { pattern },
+        `market.search_vector @@ plainto_tsquery('english', :query)`,
+        { query },
       )
-      .orderBy('market.created_at', 'DESC')
+      .orderBy(
+        `ts_rank(market.search_vector, plainto_tsquery('english', :query))`,
+        'DESC',
+      )
       .skip(skip)
       .take(limit)
       .getMany();
   }
 
   private async searchUsers(
-    pattern: string,
+    query: string,
     skip: number,
     limit: number,
   ): Promise<User[]> {
@@ -93,17 +96,20 @@ export class SearchService {
       ])
       .where('user.is_banned = :banned', { banned: false })
       .andWhere(
-        '(user.username ILIKE :pattern OR user.stellar_address ILIKE :pattern)',
-        { pattern },
+        `user.search_vector @@ plainto_tsquery('simple', :query)`,
+        { query },
       )
-      .orderBy('user.reputation_score', 'DESC')
+      .orderBy(
+        `ts_rank(user.search_vector, plainto_tsquery('simple', :query))`,
+        'DESC',
+      )
       .skip(skip)
       .take(limit)
       .getMany();
   }
 
   private async searchCompetitions(
-    pattern: string,
+    query: string,
     skip: number,
     limit: number,
   ): Promise<Competition[]> {
@@ -122,10 +128,13 @@ export class SearchService {
         visibility: CompetitionVisibility.Public,
       })
       .andWhere(
-        '(competition.title ILIKE :pattern OR competition.description ILIKE :pattern)',
-        { pattern },
+        `competition.search_vector @@ plainto_tsquery('english', :query)`,
+        { query },
       )
-      .orderBy('competition.created_at', 'DESC')
+      .orderBy(
+        `ts_rank(competition.search_vector, plainto_tsquery('english', :query))`,
+        'DESC',
+      )
       .skip(skip)
       .take(limit)
       .getMany();
