@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto';
 import { Keypair } from '@stellar/stellar-sdk';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { UserPreferences } from '../users/entities/user-preferences.entity';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +20,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     @InjectRepository(User)
     private readonly usersRepository: Repository<User>,
+    @InjectRepository(UserPreferences)
+    private readonly preferencesRepository: Repository<UserPreferences>,
   ) {}
 
   generateChallenge(stellar_address: string): string {
@@ -112,11 +115,21 @@ export class AuthService {
 
     // Upsert the user record
     let user = await this.usersRepository.findOneBy({ stellar_address });
+    const isNewUser = !user;
     if (!user) {
       this.logger.debug(`Creating new user for ${stellar_address}`);
       user = this.usersRepository.create({ stellar_address });
     }
     user = await this.usersRepository.save(user);
+
+    if (isNewUser) {
+      const existingPrefs = await this.preferencesRepository.findOneBy({ userId: user.id });
+      if (!existingPrefs) {
+        const prefs = this.preferencesRepository.create({ userId: user.id });
+        await this.preferencesRepository.save(prefs);
+      }
+    }
+
     return user;
   }
 

@@ -155,6 +155,7 @@ describe('PredictionsService', () => {
           makeUser(),
         ),
       ).rejects.toThrow(NotFoundException);
+      expect(mockSoroban.submitPrediction).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when market is resolved', async () => {
@@ -172,6 +173,7 @@ describe('PredictionsService', () => {
           makeUser(),
         ),
       ).rejects.toThrow(BadRequestException);
+      expect(mockSoroban.submitPrediction).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when market is cancelled', async () => {
@@ -189,6 +191,7 @@ describe('PredictionsService', () => {
           makeUser(),
         ),
       ).rejects.toThrow(BadRequestException);
+      expect(mockSoroban.submitPrediction).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when end_time has passed', async () => {
@@ -206,6 +209,7 @@ describe('PredictionsService', () => {
           makeUser(),
         ),
       ).rejects.toThrow(BadRequestException);
+      expect(mockSoroban.submitPrediction).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException for invalid outcome', async () => {
@@ -221,6 +225,7 @@ describe('PredictionsService', () => {
           makeUser(),
         ),
       ).rejects.toThrow(BadRequestException);
+      expect(mockSoroban.submitPrediction).not.toHaveBeenCalled();
     });
 
     it('throws ConflictException for duplicate prediction', async () => {
@@ -239,6 +244,7 @@ describe('PredictionsService', () => {
           makeUser(),
         ),
       ).rejects.toThrow(ConflictException);
+      expect(mockSoroban.submitPrediction).not.toHaveBeenCalled();
     });
   });
 
@@ -486,6 +492,50 @@ describe('PredictionsService', () => {
       const result = await service.findById('pred-1', user.id);
 
       expect(result.status).toBe('lost');
+    });
+  });
+
+  describe('findByMarket', () => {
+    it('returns anonymized and paginated predictions for an existing market', async () => {
+      const market = makeMarket();
+      mockMarketsRepo.findOne.mockResolvedValue(market);
+
+      const mockPredictions = [
+        {
+          id: 'pred-1',
+          chosen_outcome: 'Yes',
+          stake_amount_stroops: '1000',
+          payout_claimed: false,
+          payout_amount_stroops: '0',
+          tx_hash: 'tx-1',
+          submitted_at: new Date(),
+        },
+      ];
+      mockPredictionsRepo.findAndCount = jest.fn().mockResolvedValue([mockPredictions, 1]);
+
+      const result = await service.findByMarket(market.id, { page: 1, limit: 10 });
+
+      expect(result.total).toBe(1);
+      expect(result.data[0]).toEqual({
+        id: 'pred-1',
+        chosen_outcome: 'Yes',
+        stake_amount_stroops: '1000',
+        payout_claimed: false,
+        payout_amount_stroops: '0',
+        tx_hash: 'tx-1',
+        submitted_at: mockPredictions[0].submitted_at,
+      });
+      expect(result.data[0]).not.toHaveProperty('user');
+      expect(result.data[0]).not.toHaveProperty('userId');
+    });
+
+    it('returns empty list for non-existent market', async () => {
+      mockMarketsRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.findByMarket('non-existent', { page: 1, limit: 10 });
+
+      expect(result.total).toBe(0);
+      expect(result.data).toEqual([]);
     });
   });
 });

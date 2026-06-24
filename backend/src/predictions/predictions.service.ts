@@ -11,6 +11,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Prediction } from './entities/prediction.entity';
 import { SubmitPredictionDto } from './dto/submit-prediction.dto';
 import { UpdatePredictionNoteDto } from './dto/update-prediction-note.dto';
+import { ListMarketPredictionsDto } from './dto/list-market-predictions.dto';
 import {
   ListMyPredictionsDto,
   PredictionStatus,
@@ -276,5 +277,49 @@ export class PredictionsService {
     prediction.tx_hash = tx_hash;
 
     return this.predictionsRepository.save(prediction);
+  }
+
+  /**
+   * Retrieve paginated, anonymized predictions for a specific market.
+   * Returns empty list if market does not exist.
+   */
+  async findByMarket(
+    marketId: string,
+    dto: ListMarketPredictionsDto,
+  ): Promise<{ data: any[]; total: number; page: number; limit: number }> {
+    const market = await this.marketsRepository.findOne({
+      where: { id: marketId },
+    });
+    if (!market) {
+      return {
+        data: [],
+        total: 0,
+        page: dto.page ?? 1,
+        limit: dto.limit ?? 20,
+      };
+    }
+
+    const page = dto.page ?? 1;
+    const limit = Math.min(dto.limit ?? 20, 50);
+    const skip = (page - 1) * limit;
+
+    const [predictions, total] = await this.predictionsRepository.findAndCount({
+      where: { market: { id: marketId } },
+      order: { submitted_at: 'DESC' },
+      skip,
+      take: limit,
+    });
+
+    const data = predictions.map((p) => ({
+      id: p.id,
+      chosen_outcome: p.chosen_outcome,
+      stake_amount_stroops: p.stake_amount_stroops,
+      payout_claimed: p.payout_claimed,
+      payout_amount_stroops: p.payout_amount_stroops,
+      tx_hash: p.tx_hash ?? null,
+      submitted_at: p.submitted_at,
+    }));
+
+    return { data, total, page, limit };
   }
 }

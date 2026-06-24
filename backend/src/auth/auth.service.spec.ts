@@ -5,16 +5,22 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Keypair } from '@stellar/stellar-sdk';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { UserPreferences } from '../users/entities/user-preferences.entity';
 import { AuthService } from './auth.service';
 
 type UsersRepoMock = jest.Mocked<
   Pick<Repository<User>, 'findOneBy' | 'create' | 'save'>
 >;
 
+type PreferencesRepoMock = jest.Mocked<
+  Pick<Repository<UserPreferences>, 'findOneBy' | 'create' | 'save'>
+>;
+
 describe('AuthService', () => {
   let service: AuthService;
   let jwtService: jest.Mocked<JwtService>;
   let usersRepository: UsersRepoMock;
+  let preferencesRepository: PreferencesRepoMock;
 
   const address = 'GABC1234567890';
 
@@ -36,12 +42,21 @@ describe('AuthService', () => {
             save: jest.fn(),
           },
         },
+        {
+          provide: getRepositoryToken(UserPreferences),
+          useValue: {
+            findOneBy: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     service = module.get<AuthService>(AuthService);
     jwtService = module.get(JwtService);
     usersRepository = module.get(getRepositoryToken(User));
+    preferencesRepository = module.get(getRepositoryToken(UserPreferences));
   });
 
   afterEach(() => {
@@ -58,7 +73,7 @@ describe('AuthService', () => {
     expect(two).toContain(address);
   });
 
-  it('verifySignature() returns user on valid sig', async () => {
+  it('verifySignature() returns user on valid sig and creates preferences if new user', async () => {
     service.generateChallenge(address);
     jest.spyOn(service, 'verifyStellarSignature').mockReturnValue(true);
 
@@ -67,10 +82,31 @@ describe('AuthService', () => {
     usersRepository.create.mockReturnValue(savedUser);
     usersRepository.save.mockResolvedValue(savedUser);
 
+    preferencesRepository.findOneBy.mockResolvedValue(null);
+    preferencesRepository.create.mockReturnValue({ id: 'p-1', userId: 'u-1' } as UserPreferences);
+    preferencesRepository.save.mockResolvedValue({ id: 'p-1', userId: 'u-1' } as UserPreferences);
+
     const user = await service.verifySignature(address, 'signed-hex');
 
     expect(user).toEqual(savedUser);
     expect(usersRepository.save).toHaveBeenCalledWith(savedUser);
+    expect(preferencesRepository.findOneBy).toHaveBeenCalledWith({ userId: 'u-1' });
+    expect(preferencesRepository.create).toHaveBeenCalledWith({ userId: 'u-1' });
+    expect(preferencesRepository.save).toHaveBeenCalled();
+  });
+
+  it('verifySignature() does not create duplicate preferences for existing users', async () => {
+    service.generateChallenge(address);
+    jest.spyOn(service, 'verifyStellarSignature').mockReturnValue(true);
+
+    const existingUser = { id: 'u-1', stellar_address: address } as User;
+    usersRepository.findOneBy.mockResolvedValue(existingUser);
+    usersRepository.save.mockResolvedValue(existingUser);
+
+    const user = await service.verifySignature(address, 'signed-hex');
+
+    expect(user).toEqual(existingUser);
+    expect(preferencesRepository.save).not.toHaveBeenCalled();
   });
 
   it('verifySignature() throws UnauthorizedException on invalid sig', async () => {

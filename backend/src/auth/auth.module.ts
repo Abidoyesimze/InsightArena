@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
+import { UserPreferences } from '../users/entities/user-preferences.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { RateLimitService } from './rate-limit.service';
@@ -16,7 +17,7 @@ import { ApiKeyController } from './api-key.controller';
   imports: [
     PassportModule,
     ConfigModule,
-    TypeOrmModule.forFeature([User, ApiKey]),
+    TypeOrmModule.forFeature([User, ApiKey, UserPreferences]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
