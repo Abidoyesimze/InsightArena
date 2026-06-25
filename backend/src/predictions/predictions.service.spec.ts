@@ -67,6 +67,7 @@ describe('PredictionsService', () => {
     const qbMock = {
       update: jest.fn().mockReturnThis(),
       set: jest.fn().mockReturnThis(),
+      setParameters: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
       execute: jest.fn().mockResolvedValue(undefined),
     };
