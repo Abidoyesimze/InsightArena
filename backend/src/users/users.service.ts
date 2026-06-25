@@ -47,6 +47,11 @@ import {
   ListUserBookmarksDto,
   PaginatedUserBookmarksResponse,
 } from './dto/list-user-bookmarks.dto';
+import { UserStatsResponseDto } from './dto/user-stats.dto';
+import {
+  accuracyRateFromUser,
+  predictorTierFromReputation,
+} from '../analytics/analytics.service';
 
 @Injectable()
 export class UsersService {
@@ -71,6 +76,22 @@ export class UsersService {
 
   async findAll(): Promise<User[]> {
     return this.usersRepository.find();
+  }
+
+  async getMyStats(userId: string): Promise<UserStatsResponseDto> {
+    const user = await this.findById(userId);
+
+    return {
+      total_predictions: user.total_predictions,
+      correct_predictions: user.correct_predictions,
+      incorrect_predictions: user.total_predictions - user.correct_predictions,
+      accuracy_rate: accuracyRateFromUser(user),
+      tier: predictorTierFromReputation(user.reputation_score),
+      reputation_score: user.reputation_score,
+      season_points: user.season_points,
+      total_staked_stroops: user.total_staked_stroops,
+      total_winnings_stroops: user.total_winnings_stroops,
+    };
   }
 
   async findById(id: string): Promise<User> {

@@ -174,6 +174,92 @@ fn create_market_fails_fee_too_high() {
     assert!(matches!(result, Err(Ok(InsightArenaError::InvalidFee))));
 }
 
+fn fund(env: &Env, xlm_token: &Address, recipient: &Address, amount: i128) {
+    StellarAssetClient::new(env, xlm_token).mint(recipient, &amount);
+}
+
+#[test]
+fn update_creator_fee_success() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _oracle, _) = deploy_with_token(&env);
+    let creator = Address::generate(&env);
+
+    let id = client.create_market(&creator, &default_params(&env));
+    client.update_creator_fee(&creator, &id, &250_u32);
+
+    let market = client.get_market(&id);
+    assert_eq!(market.creator_fee_bps, 250);
+}
+
+#[test]
+fn update_creator_fee_fails_fee_too_high() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _oracle, _) = deploy_with_token(&env);
+    let creator = Address::generate(&env);
+
+    let id = client.create_market(&creator, &default_params(&env));
+    let result = client.try_update_creator_fee(&creator, &id, &501_u32);
+
+    assert!(matches!(result, Err(Ok(InsightArenaError::InvalidFee))));
+}
+
+#[test]
+fn update_creator_fee_fails_non_creator() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _oracle, _) = deploy_with_token(&env);
+    let creator = Address::generate(&env);
+    let other = Address::generate(&env);
+
+    let id = client.create_market(&creator, &default_params(&env));
+    let result = client.try_update_creator_fee(&other, &id, &200_u32);
+
+    assert!(matches!(result, Err(Ok(InsightArenaError::Unauthorized))));
+}
+
+#[test]
+fn update_creator_fee_fails_after_end_time() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, _oracle, _) = deploy_with_token(&env);
+    let creator = Address::generate(&env);
+
+    let params = default_params(&env);
+    let id = client.create_market(&creator, &params);
+
+    env.ledger().set_timestamp(params.end_time);
+
+    let result = client.try_update_creator_fee(&creator, &id, &200_u32);
+    assert!(matches!(result, Err(Ok(InsightArenaError::MarketExpired))));
+}
+
+#[test]
+fn update_creator_fee_applies_to_subsequent_payout() {
+    let env = Env::default();
+    env.mock_all_auths();
+    let (client, _admin, oracle, xlm_token) = deploy_with_token(&env);
+    let creator = Address::generate(&env);
+    let predictor = Address::generate(&env);
+    let stake = 50_000_000_i128;
+
+    let params = default_params(&env);
+    let market_id = client.create_market(&creator, &params);
+    fund(&env, &xlm_token, &predictor, stake);
+
+    client.submit_prediction(&predictor, &market_id, &symbol_short!("yes"), &stake);
+    client.update_creator_fee(&creator, &market_id, &200_u32);
+
+    env.ledger()
+        .with_mut(|li| li.timestamp = params.resolution_time + 1);
+    client.resolve_market(&oracle, &market_id, &symbol_short!("yes"));
+
+    let payout = client.claim_payout(&predictor, &market_id);
+    // Sole winner: gross = 50M, fees = 2% protocol + 2% creator = 4%. net = 48M
+    assert_eq!(payout, 48_000_000);
+}
+
 #[test]
 fn test_create_market_min_stake_exceeds_max_stake() {
     let env = Env::default();

@@ -44,6 +44,7 @@ import {
   ListUserMarketsDto,
   PaginatedUserMarketsResponse,
 } from './dto/list-user-markets.dto';
+import { UserStatsResponseDto } from './dto/user-stats.dto';
 
 @Controller('users')
 export class UsersController {
@@ -61,6 +62,18 @@ export class UsersController {
     return plainToInstance(UserResponseDto, user, {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Get('me/stats')
+  @ApiOperation({ summary: 'Get lightweight prediction stats for current user' })
+  @ApiResponse({
+    status: 200,
+    description: 'User stats retrieved successfully',
+    type: UserStatsResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getMyStats(@CurrentUser() user: User): Promise<UserStatsResponseDto> {
+    return this.usersService.getMyStats(user.id);
   }
 
   @Get('me/bookmarks')

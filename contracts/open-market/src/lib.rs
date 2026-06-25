@@ -165,6 +165,16 @@ impl InsightArenaContract {
         market::close_market(&env, caller, market_id)
     }
 
+    /// Update the creator fee for a market before it closes.
+    pub fn update_creator_fee(
+        env: Env,
+        creator: Address,
+        market_id: u64,
+        new_creator_fee_bps: u32,
+    ) -> Result<(), InsightArenaError> {
+        market::update_creator_fee(&env, creator, market_id, new_creator_fee_bps)
+    }
+
     /// Cancel a market and refund all stakers.
     pub fn cancel_market(
         env: Env,

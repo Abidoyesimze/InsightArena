@@ -34,6 +34,7 @@ describe('UsersController', () => {
           useValue: {
             findByAddress: jest.fn(),
             findPublicPredictionsByAddress: jest.fn(),
+            getMyStats: jest.fn(),
           },
         },
       ],
@@ -45,6 +46,28 @@ describe('UsersController', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  describe('getMyStats', () => {
+    it('should return stats for the authenticated user', async () => {
+      const mockStats = {
+        total_predictions: 10,
+        correct_predictions: 7,
+        incorrect_predictions: 3,
+        accuracy_rate: '70.0',
+        tier: 'Bronze Predictor',
+        reputation_score: 85,
+        season_points: 100,
+        total_staked_stroops: '1000000',
+        total_winnings_stroops: '500000',
+      };
+      jest.spyOn(service, 'getMyStats').mockResolvedValue(mockStats);
+
+      const result = await controller.getMyStats(mockUser);
+
+      expect(service.getMyStats).toHaveBeenCalledWith(mockUser.id);
+      expect(result).toEqual(mockStats);
+    });
   });
 
   describe('getPublicProfile', () => {

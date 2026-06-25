@@ -471,6 +471,53 @@ pub fn close_market(env: &Env, caller: Address, market_id: u64) -> Result<(), In
     Ok(())
 }
 
+/// Update the creator fee for a market while it is still open for trading.
+///
+/// Only the market creator may call this, and only before `end_time` has passed.
+/// The new fee is capped at the platform maximum (500 bps).
+pub fn update_creator_fee(
+    env: &Env,
+    creator: Address,
+    market_id: u64,
+    new_creator_fee_bps: u32,
+) -> Result<(), InsightArenaError> {
+    config::ensure_not_paused(env)?;
+
+    creator.require_auth();
+
+    let mut market = get_market(env, market_id)?;
+
+    if market.creator != creator {
+        return Err(InsightArenaError::Unauthorized);
+    }
+
+    if market.is_resolved {
+        return Err(InsightArenaError::MarketAlreadyResolved);
+    }
+
+    if market.is_cancelled {
+        return Err(InsightArenaError::MarketAlreadyCancelled);
+    }
+
+    let now = env.ledger().timestamp();
+    if now >= market.end_time {
+        return Err(InsightArenaError::MarketExpired);
+    }
+
+    let cfg = config::get_config(env)?;
+    if new_creator_fee_bps > cfg.max_creator_fee_bps {
+        return Err(InsightArenaError::InvalidFee);
+    }
+
+    market.creator_fee_bps = new_creator_fee_bps;
+    env.storage()
+        .persistent()
+        .set(&DataKey::Market(market_id), &market);
+    bump_market(env, market_id);
+
+    Ok(())
+}
+
 /// Cancel a market that could not be resolved (oracle failure, creator error, etc.).
 ///
 /// Upon cancellation every predictor's full stake is refunded via the escrow

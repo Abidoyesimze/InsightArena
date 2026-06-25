@@ -512,4 +512,46 @@ describe('UsersService', () => {
       );
     });
   });
+
+  describe('getMyStats', () => {
+    it('should return lightweight stats with computed accuracy and tier', async () => {
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(mockUser);
+
+      const result = await service.getMyStats(mockUser.id);
+
+      expect(result).toEqual({
+        total_predictions: 10,
+        correct_predictions: 7,
+        incorrect_predictions: 3,
+        accuracy_rate: '70.0',
+        tier: 'Bronze Predictor',
+        reputation_score: 85,
+        season_points: 100,
+        total_staked_stroops: '1000000',
+        total_winnings_stroops: '500000',
+      });
+    });
+
+    it('should return 0.0 accuracy when user has no predictions', async () => {
+      const userWithNoPredictions = {
+        ...mockUser,
+        total_predictions: 0,
+        correct_predictions: 0,
+      };
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(userWithNoPredictions);
+
+      const result = await service.getMyStats(mockUser.id);
+
+      expect(result.accuracy_rate).toBe('0.0');
+      expect(result.incorrect_predictions).toBe(0);
+    });
+
+    it('should throw NotFoundException when user not found', async () => {
+      jest.spyOn(repository, 'findOneBy').mockResolvedValue(null);
+
+      await expect(service.getMyStats('missing-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+  });
 });

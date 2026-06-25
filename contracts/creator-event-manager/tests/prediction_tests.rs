@@ -243,6 +243,99 @@ fn test_join_event_full_event_blocks_joining() {
 }
 
 #[test]
+fn test_join_event_max_participants_one_first_user_succeeds() {
+    let (env, client, contract_id, _admin, xlm_token) = setup();
+    let creator = Address::generate(&env);
+    let user_a = Address::generate(&env);
+    let (event_id, invite_code, _) =
+        create_event_and_match(&env, &contract_id, &client, &creator, &xlm_token, 1, 10_000);
+
+    client.join_event(&user_a, &invite_code);
+
+    let event = client.get_event(&event_id);
+    assert_eq!(event.participant_count, 1);
+    assert_eq!(client.get_event_participants(&event_id).len(), 1);
+}
+
+#[test]
+fn test_join_event_participant_count_equals_max_at_boundary() {
+    let (env, client, contract_id, _admin, xlm_token) = setup();
+    let creator = Address::generate(&env);
+    let user_a = Address::generate(&env);
+    let (event_id, invite_code, _) =
+        create_event_and_match(&env, &contract_id, &client, &creator, &xlm_token, 1, 10_000);
+
+    client.join_event(&user_a, &invite_code);
+
+    let event = client.get_event(&event_id);
+    assert_eq!(event.participant_count, event.max_participants);
+    assert_eq!(event.participant_count, 1);
+
+    let can_accept = env.as_contract(&contract_id, || {
+        storage::get_event(&env, event_id)
+            .unwrap()
+            .can_accept_participants()
+    });
+    assert!(!can_accept);
+}
+
+#[test]
+fn test_join_event_max_participants_zero_allows_unlimited_joins() {
+    let (env, client, contract_id, _admin, xlm_token) = setup();
+    let creator = Address::generate(&env);
+    let (event_id, invite_code, _) =
+        create_event_and_match(&env, &contract_id, &client, &creator, &xlm_token, 1, 10_000);
+
+    env.as_contract(&contract_id, || {
+        let mut event = storage::get_event(&env, event_id).expect("event exists");
+        event.max_participants = 0;
+        storage::set_event(&env, event_id, &event);
+    });
+
+    let user_a = Address::generate(&env);
+    let user_b = Address::generate(&env);
+    let user_c = Address::generate(&env);
+    client.join_event(&user_a, &invite_code);
+    client.join_event(&user_b, &invite_code);
+    client.join_event(&user_c, &invite_code);
+
+    assert_eq!(client.get_event(&event_id).participant_count, 3);
+}
+
+#[test]
+fn test_join_event_max_participants_two_allows_exactly_two() {
+    let (env, client, contract_id, _admin, xlm_token) = setup();
+    let creator = Address::generate(&env);
+    let user_a = Address::generate(&env);
+    let user_b = Address::generate(&env);
+    let (event_id, invite_code, _) =
+        create_event_and_match(&env, &contract_id, &client, &creator, &xlm_token, 2, 10_000);
+
+    client.join_event(&user_a, &invite_code);
+    client.join_event(&user_b, &invite_code);
+
+    let event = client.get_event(&event_id);
+    assert_eq!(event.participant_count, 2);
+    assert_eq!(event.max_participants, 2);
+}
+
+#[test]
+#[should_panic(expected = "event_full")]
+fn test_join_event_max_participants_two_third_user_rejected() {
+    let (env, client, contract_id, _admin, xlm_token) = setup();
+    let creator = Address::generate(&env);
+    let user_a = Address::generate(&env);
+    let user_b = Address::generate(&env);
+    let user_c = Address::generate(&env);
+    let (_event_id, invite_code, _) =
+        create_event_and_match(&env, &contract_id, &client, &creator, &xlm_token, 2, 10_000);
+
+    client.join_event(&user_a, &invite_code);
+    client.join_event(&user_b, &invite_code);
+    client.join_event(&user_c, &invite_code);
+}
+
+#[test]
 #[should_panic(expected = "event_cancelled")]
 fn test_join_event_cancelled_event_blocks_joining() {
     let (env, client, contract_id, _admin, xlm_token) = setup();
